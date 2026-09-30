@@ -1,0 +1,70 @@
+# ═══════════════════════════════════════════════════════════════════
+# Example: Person Tracking on RTSP Camera
+# ═══════════════════════════════════════════════════════════════════
+# changing only application-specific values.
+# Engine files (src/) are UNTOUCHED.
+#This is an example to demonstrate how you cna extend the application for custom tasks without have to change the code based on the config.yaml. 
+#Use it at your own discreation
+# Run: python src/instance_segmentation.py --config config/person_tracking.yaml
+# ═══════════════════════════════════════════════════════════════════
+
+app:
+  name: "WEDA-CV Person Tracking"
+  version: "1.0.0"
+
+model:
+  path: "yolo26n-seg.pt"
+  device: "cuda"
+  half: True
+  imgsz: 640
+  vid_stride: 1
+  retina_masks: False
+
+source: data/test.mp4
+
+camera:
+  backend: "gstreamer"
+  fourcc: "MJPG"
+  fps: 25
+  buffer_size: 1
+  threaded: True
+
+tracker: "botsort.yaml"             # BoT-SORT for better re-ID on people
+
+confidence: 0.35                    # Higher threshold — fewer false positives
+iou_threshold: 0.5
+
+classes: [0]                        # Person only (COCO class 0)
+
+visualization:
+  show: True
+  window_name: "Person Tracker"
+  show_labels: True
+  show_conf: True                   # Show confidence for person detections
+  show_boxes: True
+  show_masks: False                 # Boxes only — faster, cleaner for people
+  show_count: True
+  line_width: 2
+  mask_alpha: 0.35
+  label_font_scale: 0.6
+
+output:
+  enabled: True
+  dir: "output"
+  filename: "person_tracking.avi"
+  codec: "MJPG"
+  async_writer: True
+  queue_size: 64
+
+performance:
+  cuda_launch_blocking: False
+  warmup: True
+  memory:
+    enabled: True
+    pinned_buffers: True
+    prealloc_output: True
+
+debug:
+  timing: True
+  timing_interval: 100
+  log_level: "INFO"

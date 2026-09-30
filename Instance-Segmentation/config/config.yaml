@@ -1,0 +1,90 @@
+# ═══════════════════════════════════════════════════════════════════
+# WEDA-CV Inference Engine Configuration v1.0.0
+# ═══════════════════════════════════════════════════════════════════
+# Modify only this file as per the usecase and. The engine (instance_segmentation.py)
+# and visualizer (visualizer.py) are standard — never edit them.
+#
+# To build a new application:
+#   1. Copy this file
+#   2. Change model.path, source, classes, visualization, and output
+#   3. Run: python src/instance_segmentation.py --config config/my_app.yaml
+# ═══════════════════════════════════════════════════════════════════
+
+# --- Application metadata (logged at startup) ---
+app:
+  name: "WEDA-CV Instance Segmentation + Tracking"
+  version: "1.0.0"
+
+# --- Model ---
+model:
+  path: "yolo26n-seg.pt"          # Segmentation model (must be a -seg variant)
+  device: "cuda"                   # "cuda" | "cuda:0" | "cpu"
+  half: True                       # FP16 inference (CUDA only)
+  imgsz: 640                       # Input resolution (square)
+  vid_stride: 1                    # Process every Nth frame (1 = all)
+  retina_masks: False              # True = full-res masks (slow), False = model-res (fast)
+
+# --- Source ---
+source: data/test.mp4
+#source: 6                        # Webcam device index
+#source: rtsp://192.16.9.102:8550/video
+resize_source: [1920, 1080]       # Downscale 4K videos to 1080p for much faster processing
+
+# --- Camera backend (only applies when source is an integer device index) ---
+camera:
+  backend: "v4l2"                  # "v4l2" | "gstreamer" | "auto"
+  fourcc: "MJPG"                   # Capture format: "MJPG" (fast, HW decode) | "YUYV" (raw)
+  fps: 30                          # Requested capture FPS
+  buffer_size: 1                   # V4L2 ring buffer depth (1 = lowest latency)
+  threaded: True                   # Threaded reader for live sources (decouple capture from inference)
+
+# --- Tracker ---
+tracker: "bytetrack.yaml"          # "botsort.yaml" (better re-ID) | "bytetrack.yaml" (faster)
+
+# --- Inference thresholds ---
+confidence: 0.25
+iou_threshold: 0.7
+
+# --- Class filter ---
+# null = all classes | [0] = person | [0, 2] = person + car
+# See: https://docs.ultralytics.com/datasets/detect/coco/#dataset-yaml
+classes: null
+
+# --- Visualization ---
+visualization:
+  show: True                       # Display live window (requires X11/display)
+  window_name: "WEDA-CV Instance Segmentation"
+  show_labels: True                # "Track ID: X" labels above boxes
+  show_conf: False                 # Append confidence to label
+  show_boxes: True                 # Colored bounding box rectangles
+  show_masks: True                 # Instance segmentation mask overlay
+  show_count: True                 # "Objects Tracked: N" badge top-left
+  line_width: 2                    # Box and contour thickness
+  mask_alpha: 0.35                 # Mask transparency (0.0–1.0)
+  label_font_scale: 0.6            # Label text size
+  display_size: [1280, 720]      # Optional: set custom display window size [width, height]
+
+
+# --- Output ---
+output:
+  enabled: False                    # False = skip recording (live demo / benchmarking)
+  dir: "output"                    # Output directory (relative to project root)
+  filename: "segmented_output.avi"
+  codec: "MJPG"                    # VideoWriter fourcc: "MJPG" | "mp4v" | "XVID"
+  async_writer: True               # Threaded writer (encoding off critical path)
+  queue_size: 64                   # Async writer frame buffer depth
+
+# --- Performance / Memory ---
+performance:
+  cuda_launch_blocking: False      # Set CUDA_LAUNCH_BLOCKING=1 (debug only)
+  warmup: True                     # Run dummy inference pass to prime CUDA context
+  memory:
+    enabled: True                  # Enable UMA / pinned memory optimizations
+    pinned_buffers: True           # CUDA pinned (page-locked) frame buffers
+    prealloc_output: True          # Pre-allocate output frame buffer (avoids per-frame malloc)
+
+# --- Debug ---
+debug:
+  timing: False                      # Log per-component timing every N frames
+  timing_interval: 50              # Frames between timing reports
+  log_level: "INFO"                # "DEBUG" | "INFO" | "WARNING" | "ERROR"

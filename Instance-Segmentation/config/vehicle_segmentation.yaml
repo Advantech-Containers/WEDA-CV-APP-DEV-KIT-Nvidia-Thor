@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════════
+# Example: Vehicle Detection + Segmentation on Video File
+# ═══════════════════════════════════════════════════════════════════
+# Run: python src/instance_segmentation.py --config config/vehicle_segmentation.yaml
+# ═══════════════════════════════════════════════════════════════════
+
+app:
+  name: "WEDA-CV Vehicle Segmentation"
+  version: "1.0.0"
+
+model:
+  path: "yolo26n-seg.pt"
+  device: "cuda"
+  half: True
+  imgsz: 640
+  vid_stride: 1
+  retina_masks: True                # Full-res masks — quality over speed for offline
+
+source: data/traffic.mp4
+
+camera:
+  backend: "auto"
+  fourcc: "MJPG"
+  fps: 30
+  buffer_size: 1
+  threaded: True
+
+tracker: "bytetrack.yaml"
+
+confidence: 0.30
+iou_threshold: 0.6
+
+classes: [2, 5, 7]                  # car, bus, truck (COCO classes)
+
+visualization:
+  show: True                       # Headless — just produce output file
+  window_name: "Vehicle Segmentation"
+  show_labels: True
+  show_conf: False
+  show_boxes: True
+  show_masks: True
+  show_count: True
+  line_width: 3
+  mask_alpha: 0.40
+  label_font_scale: 0.7
+
+output:
+  enabled: True
+  dir: "output"
+  filename: "vehicle_segmentation.avi"
+  codec: "MJPG"
+  async_writer: True
+  queue_size: 128                   # Larger buffer for headless batch processing
+
+performance:
+  cuda_launch_blocking: False
+  warmup: True
+  memory:
+    enabled: True
+    pinned_buffers: True
+    prealloc_output: True
+
+debug:
+  timing: True
+  timing_interval: 200              # Less frequent logging for long videos
+  log_level: "INFO"
