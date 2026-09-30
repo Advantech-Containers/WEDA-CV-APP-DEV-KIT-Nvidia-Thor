@@ -1,0 +1,88 @@
+# ==============================================================================
+# WEDA-CV VLM Pipeline — Docker Compose
+# ==============================================================================
+services:
+  weda-cv-vlm:
+    # ── Option 1: Pull pre-built image (default) ──
+    image: ${WEDA_CV_IMAGE}
+    # ── Option 2: Build from Dockerfile (uncomment below, comment image above) ──
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    #   args:
+    #     BASE_IMAGE: ${WEDA_CV_IMAGE}
+    container_name: ${CONTAINER_NAME}
+    restart: "no"
+    runtime: nvidia
+    privileged: true
+    entrypoint: [ "/wise-edge/weda-cv-vlm/entrypoint.sh" ]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu, utility, compute, video, display ]
+    network_mode: host
+    ipc: host
+    environment:
+      # ── Display ─────────────────────────────────────────────────────────────
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.Xauthority
+      # ── NVIDIA ──────────────────────────────────────────────────────────────
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES}
+      # ── Libraries ───────────────────────────────────────────────────────────
+      - LD_LIBRARY_PATH=/opt/nvhostlibs:${LD_LIBRARY_PATH}
+      - GST_PLUGIN_PATH=/opt/nvgst
+      # ── Qt / GUI Stability ──────────────────────────────────────────────────
+      - QT_X11_NO_MITSHM=${QT_X11_NO_MITSHM}
+      - NO_AT_SPI=${NO_AT_SPI}
+      - DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}
+      # ── HuggingFace (gated models) ──────────────────────────────────────────
+      - HF_TOKEN=${HF_TOKEN}
+      # ── EULA ────────────────────────────────────────────────────────────────
+      - ACCEPT_ULTRALYTICS_EULA=${ACCEPT_ULTRALYTICS_EULA}
+      - ACCEPT_COMMERCIAL_EULA=${ACCEPT_ULTRALYTICS_EULA}
+      # ── Pipeline ────────────────────────────────────────────────────────────
+      - PIPELINE_SOURCE=${PIPELINE_SOURCE:-synthetic}
+      - PIPELINE_HEADLESS=${PIPELINE_HEADLESS:-false}
+      # ── HTTP API ────────────────────────────────────────────────────────────
+      - WEDA_API_TOKEN=${WEDA_API_TOKEN:-}
+      - WEDA_API_BIND=${WEDA_API_BIND:-127.0.0.1}
+      - WEDA_API_PORT=${WEDA_API_PORT:-9180}
+    volumes:
+      # ── Host timezone (keeps HUD clock + timeline timestamps in sync) ──────
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      # ── X11 Display ─────────────────────────────────────────────────────────
+      - ${X11_SOCKET}:/tmp/.X11-unix:rw
+      - ${XAUTHORITY}:/tmp/.Xauthority:ro
+      # ── Device Access ───────────────────────────────────────────────────────
+      - /dev:/dev:rw
+      # ── NVIDIA GStreamer plugins + dep libs (Jetson Thor CSV-parity — see TROUBLESHOOTING §9.11) ──
+      - /usr/lib/aarch64-linux-gnu/gstreamer-1.0:/opt/nvgst:ro
+      - /usr/lib/aarch64-linux-gnu/nvidia:/opt/nvhostlibs:ro
+      # ── Source ──────────────────────────────────────────────────────────
+      - ./weda_optim:/wise-edge/weda-cv-vlm/weda_optim:ro
+      - ./app:/wise-edge/weda-cv-vlm/app:ro
+      - ./config:/wise-edge/weda-cv-vlm/config:ro
+      - ./entrypoint.sh:/wise-edge/weda-cv-vlm/entrypoint.sh:ro
+      - ./assets:/wise-edge/weda-cv-vlm/assets:ro
+      - ./scripts:/wise-edge/weda-cv-vlm/scripts:ro
+      # ── Model Cache (persistent — survives container restart) ─────────────
+      - ./model_cache/huggingface:/root/.cache/huggingface:rw
+      - ./model_cache/quantized:/wise-edge/weda-cv-vlm/model_cache:rw
+      - ./model_cache/ultralytics:/root/.config/Ultralytics:rw
+      # ── Persistent Output ───────────────────────────────────────────────────
+      - ./output:/wise-edge/weda-cv-vlm/output:rw
+      - ./test_logs:/WEDA-EDGE/test_logs:rw
+    working_dir: /wise-edge/weda-cv-vlm
+    tty: true
+    stdin_open: true
+    command: /bin/bash
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE}"
+        max-file: "${LOG_MAX_FILE}"

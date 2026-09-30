@@ -1,0 +1,204 @@
+# ─────────────────────────────────────────────────────────
+# WEDA Edge CV-VLM Pipeline — Configuration
+# Target: NVIDIA Jetson Thor (JetPack 7.1, CUDA 13, sm_110)
+#
+# RT-CV:        YOLO26 (NMS-free, TensorRT FP16)
+# RT-Embedding: Cosmos-Embed1-224p (scene change, re-ID)
+# RT-VLM:       Cosmos-Reason2-2B (physical) + Qwen3-VL-30B-A3B (scene)
+# ─────────────────────────────────────────────────────────
+
+# ─── Input ───
+input:
+  backend: "auto"              # auto | v4l2 | orbbec | gstreamer | rtsp | realsense | zed
+  source: "0"
+  #source: "assets/test.mp4"                  # camera index | video path | rtsp:// URL
+  #backend: "v4l2"              # auto | v4l2 | orbbec | gstreamer | rtsp | realsense | zed
+  loop: true
+  width: 640
+  height: 480
+  rtsp:
+    protocol: "tcp"            # tcp | udp
+    reconnect_attempts: 5
+    timeout_sec: 10.0
+  orbbec:
+    align_depth: true           # hardware D2C alignment (depth mapped to color pixels)
+    depth_min_mm: 20            # minimum valid depth (mm)
+    depth_max_mm: 10000         # maximum valid depth (mm)
+
+
+# ─── Tracking (ByteTrack-style, CPU) ───
+# Industrial crowd scenes with high churn: keep tracks short-lived.
+# Default max_age=60s
+tracking:
+  max_age_sec: 5.0             # purge stale tracks
+  dormancy_sec: 0.3            # embedding re-check window
+  min_display_age: 5           # hide flicker tracks
+  iou_threshold: 0.3
+  high_thresh: 0.5
+  embedding_threshold: 0.7
+  
+# ─── RT-CV: Detection ───
+# Swap any Ultralytics model: yolo26n/s/m/l/x, yolo11n, rtdetr-l, etc.
+detection:
+  model: "yolo26n.engine"      # any .pt path or HF model ID
+  confidence: 0.5
+  input_size: 640              # inference resolution (320|640|1280)
+  use_tensorrt: true
+  device: "cuda:0"
+
+# ─── RT-Embedding: Cosmos-Embed1 ───
+embedding:
+  enabled: true               # enable Cosmos-Embed1-224p embeddings
+  model: "nvidia/Cosmos-Embed1-224p"
+  revision: null               # pin HF commit hash to lock remote code, e.g. "a1b2c3d"
+  dim: 256                     # output embedding dimension
+  scene_change_threshold: 0.85 # cosine sim below this triggers VLM
+
+# ─── RT-VLM: Physical Reasoning ───
+# Swap any HF model: nvidia/Cosmos-Reason2-2B, nvidia/Cosmos-Reason2-8B, etc.
+physical_reasoning:
+  enabled: true
+  model: "nvidia/Cosmos-Reason2-2B"       # any HF model ID
+  prompt_format: "cosmos"                  # cosmos | qwen3 | llava | chatml | raw
+  max_tokens: 80
+  cooldown_sec: 30.0
+
+# ─── RT-VLM: Scene Understanding ───
+# MUST be a vision-language model (image+text → text). Swap any HF VLM
+# with a vision encoder: Qwen3-VL, Qwen2.5-VL, LLaVA-7B/13B/34B,
+# Llama-3.1-Nemotron-Nano-VL-8B-V1, Cosmos-Reason1-7B, etc.
+#
+# Do NOT set this to a text-only LLM (e.g. Qwen2.5-0.5B-Instruct,
+# Llama-3.2-1B-Instruct) — auto-caption / scene description / per-track
+
+vlm:
+  enabled: true
+  model: "llava-hf/llava-onevision-qwen2-7b-ov-hf"
+  #model: "nvidia/Llama-3.1-Nemotron-Nano-VL-8B-V1" 
+  #model: "Qwen/Qwen3-VL-30B-A3B-Instruct"  # MoE (30B total / 3B active) — loads in BF16 (~60 GB), fits in 128 GB Thor UMA
+  prompt_format: "qwen3"                    # qwen3 | llava | cosmos | chatml | raw
+  max_tokens: 40
+  cooldown_sec: 30.0
+
+# ─── Quantization (NVIDIA) ───
+quantization:
+  backend: "auto"              # auto | modelopt | bitsandbytes | none
+  vlm_strategy: "nvfp4"        # nvfp4 | fp8 | nf4 (ignored for MoE VLMs — falls back to BF16)
+  vlm_kv_cache: "nvfp4"        # nvfp4 | fp8 | fp16
+  physical_strategy: "fp16"    # fp8 | nf4 | fp16 — fp16 is the safe default; see warning above
+  physical_kv_cache: "fp16"    # fp8 | fp16     — must match the strategy above
+  cache_dir: "/wise-edge/weda-cv-vlm/model_cache"  # volume-mounted host dir (persistent across container restarts)
+  calibration_samples: 8       # samples for PTQ calibration
+
+# ─── Optimization ───
+optimization:
+  vic_offload:
+    enabled: true              # use VIC hardware for resize/colorspace (false = cv2 fallback)
+  cuda_cache_config:
+    depth_prefer_l1: true      # maximize L1 cache for depth GPU kernels (+5-10%)
+  buffer_pool:
+    depth: 4                   # pre-allocated slots per pool
+  scheduler:
+    gpu_util_threshold: 0.85   # AUTO stages fall to CPU above this
+    max_concurrent_gpu: 2      # hard cap on simultaneous GPU stages
+    speedup_min: 2.0           # min GPU/CPU speedup for AUTO -> GPU
+  gpu_monitor:
+    enabled: true             # enable real-time tegrastats monitoring
+    interval_sec: 1.0
+
+# ─── Profiling ───
+profiling:
+  interval_frames: 100         # log summary every N frames (0 = disable)
+  window_size: 100             # rolling stats window
+
+# ─── Display ───
+# headless: false → primary demo surface = local cv2 engineer HUD (RGB
+#                   hero, depth panel, scene description, alerts, LEDs).
+#                   This is the canonical demo display.
+# headless: true  → no local cv2 window. Use only when running the
+#                   pipeline as a pure REST/inference backend that an
+#                   external consumer (e.g. NemoClaw) drives via the
+#                   /v1/* HTTP API.
+display:
+  headless: false
+  max_frames: 0                # 0 = unlimited
+
+# ─── MJPEG streaming (REST /v1/stream/*.mjpg) ───
+streaming:
+  mjpeg_fps_cap: 30            # max fps per subscriber
+  jpeg_quality: 70             # 1-100
+  draw_detections: false        # draw detection boxes on rgb.mjpg (?annotate= overrides per request)
+
+# ─── Logging ───
+logging:
+  level: "INFO"                # DEBUG | INFO | WARNING | ERROR
+  file: null
+
+# ─── Safety Zone (proximity alert) ───
+# Pulses a red border on the scene view when a moving, people-like object
+# enters a configurable radius around the camera. Static furniture /
+# appliances are excluded by the class allowlist so an AGV driving past a
+# wall-mounted TV doesn't trip the alert.
+safety:
+  zone_radius_m: 1.0              # alert fires when nearest allowed class is closer than this (meters)
+  dwell_alert_seconds: 30.0       # extra alert if a tracked object lingers in-zone this long
+  # Hysteresis — eliminates flicker from single-frame depth/detector noise.
+  enter_frames: 3                  # consecutive in-zone frames required before firing
+  exit_frames: 5                   # consecutive out-of-zone frames required before clearing
+  # Classes eligible to trigger the alert. Empty list = allow ALL detected
+  # classes. Override per-site to match your operational concerns.
+  alert_classes:
+    - person
+    - worker
+    - operator
+    - pedestrian
+    - forklift
+    - agv
+    - robot
+    - cart
+    - trolley
+    - box
+    - pallet
+    - crate
+    - bin
+    - dog
+    - cat
+
+# ──────────────────────────────────────────────────────────────────
+# v2 additions — Industrial AI Platform on Thor
+# ──────────────────────────────────────────────────────────────────
+
+# HTTP API surface — exposed to NemoClaw agents and any other
+# consumer. Bound to localhost by default; flip `bind` to "0.0.0.0"
+# for plant-LAN access. `token_env` names the env var holding the
+# bearer token; if unset, write endpoints are open (dev mode).
+api:
+  enable: false
+  bind: "127.0.0.1"
+  port: 9180
+  token_env: "WEDA_API_TOKEN"
+
+# Innovation features — fact-checking, scene memory, predictive safety,
+# alarm engine.
+innovation:
+  fact_check:
+    enable: true
+    distance_tolerance_pct: 15.0
+    size_tolerance_pct: 25.0
+  scene_memory:
+    enable: false
+    window_min: 3          # cap: 30 min @ 1 Hz ≈ 1 GB RAM
+    sample_hz: 1.0
+  predictive_safety:
+    enable: false
+    horizon_s: 3.0
+    critical_eta_s: 1.5
+    danger_distance_m: 0.8
+  alarm_engine:
+    enable: false
+    persist_path: "config/alarms.jsonl"
+
+telemetry:
+  enable: true
+  sample_interval_ms: 100
+  tariff_usd_per_kwh: 0.12
