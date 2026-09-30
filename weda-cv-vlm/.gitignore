@@ -1,2 +1,34 @@
-.env.secrets
+# ── Secrets / host-specific config ───────────────────────────────
+.env.local
+*.env.private
+
+# ── Runtime artefacts ─────────────────────────────────────────────
+output/
+test_logs/
 model_cache/
+samples/
+.ready
+
+# ── Python ────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# ── Editor / OS ───────────────────────────────────────────────────
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Misc ──────────────────────────────────────────────────────────
+*.log
+/tmp/
