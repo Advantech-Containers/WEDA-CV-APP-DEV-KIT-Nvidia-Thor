@@ -1,0 +1,104 @@
+# ==============================================================================
+# WEDA-CV ObjectCounting Demo — Configuration
+# ==============================================================================
+# Edit this file to switch between counting tasks, models, and sources.
+# Refer to config.schema.md for full documentation of each parameter.
+# ==============================================================================
+
+# ────────────────────────────────────────────────────────────────────────────
+# Task Selection
+# ────────────────────────────────────────────────────────────────────────────
+# Options: line_count | region_count | polygon_count
+task: line_count
+
+# ────────────────────────────────────────────────────────────────────────────
+# Model Configuration
+# ────────────────────────────────────────────────────────────────────────────
+model:
+  # Path to the model file.
+  # .pt files are auto-downloaded by Ultralytics if not found locally.
+  # Other formats (onnx, engine, trt) must exist at the specified path.
+  path: yolo26n.pt
+  #path: yolo26n.onnx
+  #path: yolo26n.engine
+  # Model format: pt | onnx | engine | trt | torchscript
+  format: pt
+  # Enable half-precision (FP16) inference (CUDA only)
+  half: true
+  # Inference resolution
+  imgsz: 640
+  # Inference frequency (1 = every frame, 2 = every other frame)
+  vid_stride: 1
+  # Inference device: "0" (GPU 0), "cpu", or "cuda:0"
+  device: "0"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Input Source
+# ────────────────────────────────────────────────────────────────────────────
+# Accepts:
+#   - Video file path  : assets/sample.mp4
+#   - RTSP stream URL  : rtsp://user:pass@192.168.1.100:554/stream
+#   - Webcam index     : 0q
+#   - Image directory  : assets/frames/
+#source: 6 #Make sure the camera node is working before running the application
+#source: rtsp://192.16.9.65:8550/video 
+source: data/test.mp4
+resize_source: [1920, 1080]
+#source: "v4l2src device=/dev/video6 ! video/x-raw, width=1280, height=720, framerate=30/1 ! videoconvert ! appsink drop=true max-buffers=1"
+
+# ────────────────────────────────────────────────────────────────────────────
+# Region of Interest (ROI)
+# ────────────────────────────────────────────────────────────────────────────
+# Define points based on the selected task:
+#   line_count    → exactly 2 points (a line)
+#   region_count  → exactly 4 points (a rectangle)
+#   polygon_count → 3 or more points (an arbitrary polygon)
+#
+# Coordinate format: [x, y] in pixels relative to the video frame
+# Or as dynamic relative float coordinates [0.0 to 1.0] to scale automatically!
+roi:
+  points:
+    - [0.0, 0.5]
+    - [1.0, 0.5]
+
+# ────────────────────────────────────────────────────────────────────────────
+# Detection Settings
+# ────────────────────────────────────────────────────────────────────────────
+# Minimum confidence threshold for detections (0.0 – 1.0)
+confidence: 0.25
+
+# IoU threshold for Non-Maximum Suppression (0.0 – 1.0)
+iou_threshold: 0.7
+
+# Filter by class IDs (COCO dataset indices). null = all classes.
+# Examples: [0] = person only, [0, 2] = person + car, [2, 5, 7] = car + bus + truck
+classes: [0]
+
+# Object tracker: botsort.yaml | bytetrack.yaml
+#tracker: botsort.yaml
+tracker: bytetrack.yaml
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Visualization
+# ────────────────────────────────────────────────────────────────────────────
+# Show live OpenCV window (requires X11 display)
+show: true
+
+# Show class labels on detections
+show_labels: true
+
+# Show confidence scores on detections
+show_conf: true
+
+# Bounding box and region line width in pixels
+line_width: 2
+
+# ────────────────────────────────────────────────────────────────────────────
+# Output
+# ────────────────────────────────────────────────────────────────────────────
+# Directory for output video
+output_dir: output
+
+# Output video filename
+output_filename: counted_output.avi

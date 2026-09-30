@@ -1,0 +1,80 @@
+# ==============================================================================
+# WEDA-CV ObjectCounting Demo — Docker Compose
+# ==============================================================================
+services:
+  object-counter:
+    image: ${WEDA_CV_IMAGE}
+    container_name: ${CONTAINER_NAME}
+    restart: "no"
+    runtime: nvidia
+    privileged: true
+    entrypoint: ["/wise-edge/object-counting/entrypoint.sh"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility, compute, video, display]
+    network_mode: host
+    ipc: host
+    environment:
+      # ── Display ─────────────────────────────────────────────────────────────
+      - DISPLAY=${DISPLAY}
+      - XAUTHORITY=/tmp/.Xauthority
+      # ── NVIDIA ──────────────────────────────────────────────────────────────
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES}
+      # ── Libraries ───────────────────────────────────────────────────────────
+      - LD_LIBRARY_PATH=${LD_LIBRARY_PATH}
+      # ── Qt / GUI Stability ──────────────────────────────────────────────────
+      - QT_X11_NO_MITSHM=${QT_X11_NO_MITSHM}
+      - NO_AT_SPI=${NO_AT_SPI}
+      - DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS}
+      # ── EULA ────────────────────────────────────────────────────────────────
+      - ACCEPT_ULTRALYTICS_EULA=${ACCEPT_ULTRALYTICS_EULA}
+      - ACCEPT_COMMERCIAL_EULA=${ACCEPT_ULTRALYTICS_EULA}
+      # ── BYOL Packages ───────────────────────────────────────────────────────
+      # Declared here (not just exported by entrypoint.sh) so that `docker exec`
+      # shells resolve the BYOL install too. PATH is prepended by entrypoint.sh
+      # and /etc/profile.d, never replaced, so base-image entries survive.
+      - WEDA_CV_BYOL_DIR=/opt/weda-cv/byol
+      - PYTHONPATH=/opt/weda-cv/byol
+      - ULTRALYTICS_VERSION=${ULTRALYTICS_VERSION}
+      - ULTRALYTICS_THOP_VERSION=${ULTRALYTICS_THOP_VERSION}
+    volumes:
+      # ── X11 Display ─────────────────────────────────────────────────────────
+      - ${X11_SOCKET}:/tmp/.X11-unix:rw
+      - ${XAUTHORITY}:/tmp/.Xauthority:ro
+      # ── Device Access ───────────────────────────────────────────────────────
+      - /dev:/dev:rw
+      # ── Source (live edit, no rebuild required) ──────────────────────────────
+      - ./src:/wise-edge/object-counting/src:ro
+      - ./config:/wise-edge/object-counting/config:ro
+      - ./data:/wise-edge/object-counting/data:ro
+      - ./wise-bench:/wise-edge/object-counting/wise-bench:ro
+      - ./entrypoint.sh:/wise-edge/object-counting/entrypoint.sh:ro
+      # ── Persistent Output ───────────────────────────────────────────────────
+      - ./output:/wise-edge/object-counting/output:rw
+      - ./test_logs:/wise-edge/object-counting/test_logs:rw
+      # ── BYOL Packages (persisted: hydrate once per device, not per launch) ──
+      - byol:/opt/weda-cv/byol:rw
+    working_dir: /wise-edge/object-counting
+    tty: true
+    stdin_open: true
+    command: /bin/bash
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "${LOG_MAX_SIZE}"
+        max-file: "${LOG_MAX_FILE}"
+
+# ==============================================================================
+# Named volume holding the licensed (BYOL) Ultralytics install. Kept outside the
+# container lifecycle so that recreating the container does not force a network
+# re-install — the root cause of the hydration timeouts on slow links.
+# Purge with: ./build.sh --clean
+# ==============================================================================
+volumes:
+  byol:
+    name: ${BYOL_VOLUME}
